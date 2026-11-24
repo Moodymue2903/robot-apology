@@ -12,6 +12,7 @@ exactly 2 lines, exactly one sentence per line. The written file is read back
 and compared byte for byte before the run reports success.
 """
 
+import argparse
 import os
 import re
 import sys
@@ -51,9 +52,14 @@ def validate(text):
     return None
 
 
+def build_text():
+    """Join the entry lines into the text to be written."""
+    return "\n".join(LINES)
+
+
 def write_entry(path, text):
     """Write the text to path, creating its directory; return chars written."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="") as f:
         return f.write(text)
 
@@ -67,14 +73,42 @@ def verify_written(path, text):
     return None
 
 
-def main():
-    text = "\n".join(LINES)
+def parse_args(argv=None):
+    """Parse CLI options; defaults preserve the standard entry path."""
+    parser = argparse.ArgumentParser(
+        description="Write the Robot Apology entry to a file."
+    )
+    parser.add_argument(
+        "--output",
+        default=ENTRY_PATH,
+        help=f"path to write the entry to (default: {ENTRY_PATH})",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="validate the entry and print it without writing any file",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    text = build_text()
     problem = validate(text)
     if problem is not None:
         print(f"error: {problem}", file=sys.stderr)
         sys.exit(1)
 
-    written = write_entry(ENTRY_PATH, text)
+    if args.dry_run:
+        print(text)
+        print(f"(dry run: {len(text)} characters, 2 lines, nothing written)")
+        return
+
+    try:
+        written = write_entry(args.output, text)
+    except OSError as exc:
+        print(f"error: cannot write {args.output}: {exc}", file=sys.stderr)
+        sys.exit(1)
     if written != len(text):
         print(
             f"error: wrote {written} characters, expected {len(text)}",
@@ -82,12 +116,16 @@ def main():
         )
         sys.exit(1)
 
-    problem = verify_written(ENTRY_PATH, text)
+    try:
+        problem = verify_written(args.output, text)
+    except OSError as exc:
+        print(f"error: cannot read back {args.output}: {exc}", file=sys.stderr)
+        sys.exit(1)
     if problem is not None:
         print(f"error: {problem}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"wrote {len(text)} characters, 2 lines, to /output/entry.txt")
+    print(f"wrote {len(text)} characters, 2 lines, to {args.output}")
 
 
 if __name__ == "__main__":
